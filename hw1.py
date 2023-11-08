@@ -31,6 +31,8 @@ if __name__ == '__main__':
 print("xinyi edit")
 <<<<<<< HEAD
 
+print("果蔬一最帅!")
+
     print('modified')
 =======
 >>>>>>> 90afa8ac8ae0582f757cba1eba638e2d78d22c35

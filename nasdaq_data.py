@@ -14,6 +14,8 @@ nasdaq_100_tickers = ["AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "TSLA", "META", "
     "VRSN", "AEP", "ZBRA", "PTON", "TCOM", "NTES", "BMRN", "ULTA", "EXPE",
     "CSGP", "SIRI", "EBAY", "WDC"
     ]
+nasdaq_20_tickers = ["AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "TSLA", "META", "NVDA", "PYPL", "NFLX",
+    "ASML", "ADBE", "INTC", "CMCSA", "CSCO", "PEP", "AVGO", "TMUS", "COST", "PDD"]
 
 end_date = '2022-12-31'
 start_date = '2018-1-1'

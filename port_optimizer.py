@@ -73,16 +73,6 @@ def mean_variance_optimization(curr_ret):
                       constraints=[weight_sum_constraint,risk_constraint])
     return result.x
 
-def value_at_risk(value_invested, returns, weights, alpha=0.95, lookback_days=500):
-    portfolio_returns = returns.iloc[-lookback_days:].dot(weights)
-    return np.percentile(portfolio_returns, 100 * (1-alpha)) * value_invested
-
-def cvar(value_invested, returns, weights, alpha=0.95, lookback_days=500):
-    var = value_at_risk(value_invested, returns, weights, alpha, lookback_days=lookback_days)
-    portfolio_returns = returns.iloc[-lookback_days:].dot(weights)
-    var_pct_loss = var / value_invested
-    return np.nanmean(portfolio_returns[portfolio_returns < var_pct_loss]) * value_invested
-
 def roundNum(x):
     return round(x,4)
 

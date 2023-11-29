@@ -105,6 +105,7 @@ for i in window_list:
     portfolio_ret = 1
     for ret in normal_ret_list:
         portfolio_ret *= (1+ret)
+    portfolio_ret -= 1
     #print(len(optimized_weights_list))
     
     # VaR and CVaR analysis
@@ -126,10 +127,12 @@ for i in window_list:
     plt.show()
     
     # print out report
+    portfolio_ret = roundNum(portfolio_ret)
     annualized_ret = roundNum(annualized_ret)
     portfolio_VaR_return = roundNum(portfolio_VaR_return)
     portfolio_CVaR_return = roundNum(portfolio_CVaR_return)
     print(f"{i}-day window returns:")
+    print(f"  Absolute Return: {portfolio_ret}")
     print(f"  Annualized Return: {annualized_ret}")
     print(f"  VaR Return: {portfolio_VaR_return}")
     print(f"  CVaR Return: {portfolio_CVaR_return}")

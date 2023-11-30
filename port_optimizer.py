@@ -5,6 +5,9 @@ import yfinance as yf
 from scipy.optimize import minimize
 
 # data collecting
+value_invested = 1
+alpha = 0.95
+window_list = [90,120,150]
 tickers = ["AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "TSLA", "META", "NVDA", "PYPL", "NFLX",
     "ASML", "ADBE", "INTC", "CMCSA", "CSCO", "PEP", "AVGO", "TMUS", "COST",
     "TXN", "QCOM", "AMAT", "MU", "AMGN", "INTU", "ISRG", "CSX", "VRTX",
@@ -18,25 +21,20 @@ tickers = ["AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "TSLA", "META", "NVDA", "PYP
     "CSGP", "SIRI", "EBAY", "WDC"
     ]
 
-real_data=pd.read_csv('real.csv', header=0)
-real_data=real_data.set_index(['ticker', 'Date'])
-real_adj_close=pd.DataFrame()
-real_log_ret=pd.DataFrame()
-for ticker in tickers:
-    real_adj_close[ticker]=real_data.loc[ticker]['Adj Close']
-    daily_log_return = np.log(real_adj_close[ticker] / real_adj_close[ticker].shift(1))
-    real_log_ret[ticker] = daily_log_return
-real_logret=real_log_ret.iloc[1:, :]
+def getData(tickers):
+    real_data=pd.read_csv('real.csv', header=0)
+    real_data=real_data.set_index(['ticker', 'Date'])
+    real_adj_close=pd.DataFrame()
+    real_log_ret=pd.DataFrame()
+    for ticker in tickers:
+        real_adj_close[ticker]=real_data.loc[ticker]['Adj Close']
+        daily_log_return = np.log(real_adj_close[ticker] / real_adj_close[ticker].shift(1))
+        real_log_ret[ticker] = daily_log_return
+    real_logret=real_log_ret.iloc[1:, :]
 
-pred = pd.read_csv("pred.csv")
-pred_logret = pred[pred.columns[1:]]
-
-real_logret = real_logret.iloc[:,:]
-pred_logret = pred_logret.iloc[:,:]
-
-num_stocks = len(tickers)
-value_invested = 1
-alpha = 0.95
+    pred = pd.read_csv("pred.csv")
+    pred_logret = pred[pred.columns[1:]].iloc[1:,:]
+    return real_logret ,pred_logret
 
 #MVO optimization
 def mean_variance_optimization(curr_ret):
@@ -74,81 +72,90 @@ def mean_variance_optimization(curr_ret):
 def roundNum(x):
     return round(x,4)
 
-#index return
-index_data = yf.download("^IXIC","2021-01-01","2022-12-31",progress = False)["Adj Close"]
-index_ret = roundNum((index_data[-1] / index_data[0]) - 1)
-print(f"Index return in the period 2021-2022 is {index_ret}")
+def getIndexReturn():
+    index_data = yf.download("^IXIC", "2021-01-01", "2022-12-31", progress=False)["Adj Close"]
+    index_ret = roundNum((index_data[-1] / index_data[0]) - 1)
+    return index_ret
 
-window_list = [90]
-for i in window_list:
-    logret_list = []
-    normal_logret_list = []
-    optimized_weights_list = []
-    portfolio_ret = 1
-    normal_portfolio_ret = 1
-    
-    # normal MVO strategy
-    for j in range(i+1, len(real_logret.index)):
-        normal_curr_ret = real_logret.iloc[j-i-1:j-1]
-        normal_optimized_weights = mean_variance_optimization(normal_curr_ret)
-        normal_logret = np.dot(real_logret.iloc[j],normal_optimized_weights)
-        normal_logret_list.append(normal_logret)
-    
-    normal_simple_ret_list = np.exp(normal_logret_list)-1
-    normal_annualized_ret = np.mean(normal_simple_ret_list)*252
-    for normal_ret in normal_simple_ret_list:
-        normal_portfolio_ret *= (1+normal_ret)
-    normal_portfolio_ret -= 1
-    
-    # our strategy
-    for j in range(i,len(real_logret.index)):
-        past_ret = real_logret.iloc[j-i:j-1]
-        pred_ret = pred_logret.iloc[j-1:j]
-        curr_ret = pd.concat([past_ret,pred_ret])
+def execute_strategy(real_logret, pred_logret):
+    for i in window_list:
+        # Code for executing the strategy
+        logret_list = []
+        normal_logret_list = []
+        optimized_weights_list = []
+        portfolio_ret = 1
+        normal_portfolio_ret = 1
         
-        optimized_weights = mean_variance_optimization(curr_ret)
-        optimized_weights_list.append(optimized_weights)
-        logret = np.dot(real_logret.iloc[j],optimized_weights)
-        logret_list.append(logret)
+        # normal MVO strategy
+        for j in range(i+1, len(real_logret.index)):
+            normal_curr_ret = real_logret.iloc[j-i-1:j-1]
+            normal_optimized_weights = mean_variance_optimization(normal_curr_ret)
+            normal_logret = np.dot(real_logret.iloc[j],normal_optimized_weights)
+            normal_logret_list.append(normal_logret)
         
-        #print(pred_ret.index)
-    #returns and annualized returns
-    simple_ret_list = np.exp(logret_list)-1
-    annualized_ret = np.mean(simple_ret_list)*252
-    for ret in simple_ret_list:
-        portfolio_ret *= (1+ret)
-    portfolio_ret -= 1
-    #print(len(optimized_weights_list))
-    
-    # VaR and CVaR analysis
-    portfolio_VaR = np.percentile(simple_ret_list, 100 * (1-alpha)) * value_invested
-    portfolio_VaR_return = portfolio_VaR / value_invested
-    
-    portfolio_CVaR = np.nanmean(simple_ret_list[simple_ret_list 
-                                                < portfolio_VaR_return]) * value_invested
-    portfolio_CVaR_return = portfolio_CVaR / value_invested
-    
-    # grpah for VaR and CVaR analysis
-    plt.hist(simple_ret_list)
-    plt.axvline(portfolio_VaR_return, color='red', linestyle='solid')
-    plt.axvline(portfolio_CVaR_return, color='red', linestyle='dashed')
-    plt.legend(['VaR', 'CVaR', 'Returns'])
-    plt.title(f'Historical VaR and CVaR for {i}-day Window')
-    plt.xlabel('Return')
-    plt.ylabel('Observation Frequency')
-    plt.show()
-    
-    # print out report
-    normal_portfolio_ret = roundNum(normal_portfolio_ret)
-    portfolio_ret = roundNum(portfolio_ret)
-    annualized_ret = roundNum(annualized_ret)
-    portfolio_VaR_return = roundNum(portfolio_VaR_return)
-    portfolio_CVaR_return = roundNum(portfolio_CVaR_return)
-    print(f"{i}-day window returns:")
-    print(f" MVO without Strategy Return: {normal_portfolio_ret}")
-    print(f"  Strategy Absolute Return: {portfolio_ret}")
-    print(f"  Strategy Annualized Return: {annualized_ret}")
-    print(f"  Strategy VaR Return: {portfolio_VaR_return}")
-    print(f"  Strategy CVaR Return: {portfolio_CVaR_return}")
-    
-    optimal_weights_df = pd.DataFrame(optimized_weights_list)
+        normal_simple_ret_list = np.exp(normal_logret_list)-1
+        normal_annualized_ret = np.mean(normal_simple_ret_list)*252
+        for normal_ret in normal_simple_ret_list:
+            normal_portfolio_ret *= (1+normal_ret)
+        normal_portfolio_ret -= 1
+        
+        # our strategy
+        for j in range(i,len(real_logret.index)):
+            past_ret = real_logret.iloc[j-i:j-1]
+            pred_ret = pred_logret.iloc[j-1:j]
+            curr_ret = pd.concat([past_ret,pred_ret])
+            
+            optimized_weights = mean_variance_optimization(curr_ret)
+            optimized_weights_list.append(optimized_weights)
+            logret = np.dot(real_logret.iloc[j],optimized_weights)
+            logret_list.append(logret)
+            
+            #print(pred_ret.index)
+        #returns and annualized returns
+        simple_ret_list = np.exp(logret_list)-1
+        annualized_ret = np.mean(simple_ret_list)*252
+        for ret in simple_ret_list:
+            portfolio_ret *= (1+ret)
+        portfolio_ret -= 1
+
+        # VaR and CVaR analysis
+        portfolio_VaR = np.percentile(simple_ret_list, 100 * (1-alpha)) * value_invested
+        portfolio_VaR_return = portfolio_VaR / value_invested
+        
+        portfolio_CVaR = np.nanmean(simple_ret_list[simple_ret_list 
+                                                    < portfolio_VaR_return]) * value_invested
+        portfolio_CVaR_return = portfolio_CVaR / value_invested
+        
+        # grpah for VaR and CVaR analysis
+        plt.hist(simple_ret_list)
+        plt.axvline(portfolio_VaR_return, color='red', linestyle='solid')
+        plt.axvline(portfolio_CVaR_return, color='red', linestyle='dashed')
+        plt.legend(['VaR', 'CVaR', 'Returns'])
+        plt.title(f'Historical VaR and CVaR for {i}-day Window')
+        plt.xlabel('Return')
+        plt.ylabel('Observation Frequency')
+        plt.show()
+
+        # Print out the report
+        normal_portfolio_ret = roundNum(normal_portfolio_ret)
+        portfolio_ret = roundNum(portfolio_ret)
+        annualized_ret = roundNum(annualized_ret)
+        portfolio_VaR_return = roundNum(portfolio_VaR_return)
+        portfolio_CVaR_return = roundNum(portfolio_CVaR_return)
+        print(f"{i}-day window returns:")
+        print(f" MVO without Strategy Return: {normal_portfolio_ret}")
+        print(f"  Strategy Absolute Return: {portfolio_ret}")
+        print(f"  Strategy Annualized Return: {annualized_ret}")
+        print(f"  Strategy VaR Return: {portfolio_VaR_return}")
+        print(f"  Strategy CVaR Return: {portfolio_CVaR_return}")
+        optimal_weights_df = pd.DataFrame(optimized_weights_list)
+
+def main():
+    real_logret = getData(tickers)[0].iloc[:,:]
+    pred_logret = getData(tickers)[1].iloc[:,:]
+    index_ret = getIndexReturn()
+    print(f"Index return: {index_ret}")
+    execute_strategy(real_logret, pred_logret)
+
+if __name__ == "__main__":
+    main()

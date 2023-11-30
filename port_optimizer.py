@@ -7,7 +7,7 @@ from scipy.optimize import minimize
 # data collecting
 value_invested = 1
 alpha = 0.95
-window_list = [90,120,150]
+window_list = [90]
 tickers = ["AAPL", "MSFT", "AMZN", "GOOGL", "GOOG", "TSLA", "META", "NVDA", "PYPL", "NFLX",
     "ASML", "ADBE", "INTC", "CMCSA", "CSCO", "PEP", "AVGO", "TMUS", "COST",
     "TXN", "QCOM", "AMAT", "MU", "AMGN", "INTU", "ISRG", "CSX", "VRTX",
@@ -37,17 +37,17 @@ def getData(tickers):
     return real_logret ,pred_logret
 
 #MVO optimization
-def mean_variance_optimization(curr_ret):
+def MVO(curr_ret):
     mean_returns = curr_ret.mean()
     cov_matrix = curr_ret.cov()
     num_assets = len(curr_ret.columns)
     #print(num_assets)
     initial_weights = np.ones(num_assets) / num_assets
     # minimize negative portfolio returns
-    def negative_portfolio_returns(weights):
+    def negative_port_ret(weights):
         return -np.sum(mean_returns * weights)
     
-    def portfolio_var(weights):
+    def port_variance(weights):
         #print(np.dot(weights.T, np.dot(cov_matrix, weights)))
         return np.dot(weights.T, np.dot(cov_matrix, weights))
     
@@ -62,9 +62,9 @@ def mean_variance_optimization(curr_ret):
     weight_sum_constraint = {'type': 'eq', 'fun': 
                              lambda weights: np.sum(weights) - 1}
     risk_constraint = {'type': 'ineq', 'fun': 
-                       lambda weights: max_var - portfolio_var(weights)}
+                       lambda weights: max_var - port_variance(weights)}
     # Perform MVO optimization
-    result = minimize(negative_portfolio_returns, initial_weights, 
+    result = minimize(negative_port_ret, initial_weights, 
                       method='SLSQP', bounds=bounds, 
                       constraints=[weight_sum_constraint,risk_constraint])
     return result.x
@@ -77,7 +77,7 @@ def getIndexReturn():
     index_ret = roundNum((index_data[-1] / index_data[0]) - 1)
     return index_ret
 
-def execute_strategy(real_logret, pred_logret):
+def runStrategy(real_logret, pred_logret):
     for i in window_list:
         # Code for executing the strategy
         logret_list = []
@@ -89,7 +89,7 @@ def execute_strategy(real_logret, pred_logret):
         # normal MVO strategy
         for j in range(i+1, len(real_logret.index)):
             normal_curr_ret = real_logret.iloc[j-i-1:j-1]
-            normal_optimized_weights = mean_variance_optimization(normal_curr_ret)
+            normal_optimized_weights = MVO(normal_curr_ret)
             normal_logret = np.dot(real_logret.iloc[j],normal_optimized_weights)
             normal_logret_list.append(normal_logret)
         
@@ -104,8 +104,10 @@ def execute_strategy(real_logret, pred_logret):
             past_ret = real_logret.iloc[j-i:j-1]
             pred_ret = pred_logret.iloc[j-1:j]
             curr_ret = pd.concat([past_ret,pred_ret])
+            #print(curr_ret)
             
-            optimized_weights = mean_variance_optimization(curr_ret)
+            
+            optimized_weights = MVO(curr_ret)
             optimized_weights_list.append(optimized_weights)
             logret = np.dot(real_logret.iloc[j],optimized_weights)
             logret_list.append(logret)
@@ -119,16 +121,16 @@ def execute_strategy(real_logret, pred_logret):
         portfolio_ret -= 1
 
         # VaR and CVaR analysis
-        portfolio_VaR = np.percentile(simple_ret_list, 100 * (1-alpha)) * value_invested
-        portfolio_VaR_return = portfolio_VaR / value_invested
+        port_variance = np.percentile(simple_ret_list, 100 * (1-alpha)) * value_invested
+        port_variance_return = port_variance / value_invested
         
         portfolio_CVaR = np.nanmean(simple_ret_list[simple_ret_list 
-                                                    < portfolio_VaR_return]) * value_invested
+                                                    < port_variance_return]) * value_invested
         portfolio_CVaR_return = portfolio_CVaR / value_invested
         
         # grpah for VaR and CVaR analysis
         plt.hist(simple_ret_list)
-        plt.axvline(portfolio_VaR_return, color='red', linestyle='solid')
+        plt.axvline(port_variance_return, color='red', linestyle='solid')
         plt.axvline(portfolio_CVaR_return, color='red', linestyle='dashed')
         plt.legend(['VaR', 'CVaR', 'Returns'])
         plt.title(f'Historical VaR and CVaR for {i}-day Window')
@@ -140,22 +142,24 @@ def execute_strategy(real_logret, pred_logret):
         normal_portfolio_ret = roundNum(normal_portfolio_ret)
         portfolio_ret = roundNum(portfolio_ret)
         annualized_ret = roundNum(annualized_ret)
-        portfolio_VaR_return = roundNum(portfolio_VaR_return)
+        port_variance_return = roundNum(port_variance_return)
         portfolio_CVaR_return = roundNum(portfolio_CVaR_return)
         print(f"{i}-day window returns:")
         print(f" MVO without Strategy Return: {normal_portfolio_ret}")
         print(f"  Strategy Absolute Return: {portfolio_ret}")
         print(f"  Strategy Annualized Return: {annualized_ret}")
-        print(f"  Strategy VaR Return: {portfolio_VaR_return}")
+        print(f"  Strategy VaR Return: {port_variance_return}")
         print(f"  Strategy CVaR Return: {portfolio_CVaR_return}")
         optimal_weights_df = pd.DataFrame(optimized_weights_list)
 
 def main():
-    real_logret = getData(tickers)[0].iloc[:,:]
-    pred_logret = getData(tickers)[1].iloc[:,:]
+    real_logret = getData(tickers)[0].iloc[:,:5]
+    #print(real_logret)
+    pred_logret = getData(tickers)[1].iloc[:,:5]
+    #print(pred_logret)
     index_ret = getIndexReturn()
     print(f"Index return: {index_ret}")
-    execute_strategy(real_logret, pred_logret)
+    runStrategy(real_logret, pred_logret)
 
 if __name__ == "__main__":
     main()
